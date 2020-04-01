@@ -1,0 +1,27 @@
+[Server]
+Host = "0.0.0.0"
+Port = 8080
+AdminHost = "127.0.0.1"
+AdminPort = 8081
+LogDir = "/www/privdata/kaproxy/logs"
+
+[Kafka]
+Brokers = ["127.0.0.1:9092"]
+Version = "0.8.2.2"
+Zookeepers = ["127.0.0.1:2181"]
+ZKSessionTimeout = "6s"
+
+[Consumer]
+OffsetAutoCommitInterval = "10s"
+OffsetAutoReset = "oldest"
+ClaimPartitionRetryInterval = "2s"
+
+[Producer]
+Clients = 5
+
+[Replication]
+MyDatacenterName = "FIXME"
+# optional configs
+# BatchChecksumSize = 20
+# CrossDatacenterReplicationTopic = "__cross_datacenter_replication"
+# ReplicationAclUpdateInterval = "10s"

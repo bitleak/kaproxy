@@ -1,0 +1,27 @@
+[Server]
+Host = "127.0.0.1"
+Port = 8080
+AdminHost = "__IP_ADDRESS__"
+AdminPort = 8081
+LogDir = "./log"
+PullerHost = "__IP_ADDRESS__"
+
+[Kafka]
+Brokers = ["kafka:9092"]
+Zookeepers = ["zookeeper:2181"]
+ZKSessionTimeout = "6s"
+
+[Consumer]
+PushBackoff = "1s"
+OffsetAutoCommitInterval = "10s"
+OffsetAutoReset = "oldest"
+ClaimPartitionRetryInterval = "2s"
+UnACKQueueMaxSize = 10
+PullFromPeersTimes = 2
+
+[Replication]
+BatchChecksumSize = 5
+MyDatacenterName = "BJ_ZW"
+CrossDatacenterReplicationTopic = "__cross_datacenter_replication"
+ReplicationAclUpdateInterval = "5s"
+UUIDServers = ["127.0.0.1:1234"]
