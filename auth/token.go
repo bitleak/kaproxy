@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/meitu/go-zookeeper/zk"
 	"github.com/meitu/kaproxy/util"
@@ -196,10 +197,10 @@ func (tm *TokenManager) loop() {
 		} else {
 			select {
 			case <-watcher.EvCh:
-				tm.logger.Info("Sync tokens action was triggered by watch")
+				tm.logger.Debug("Sync tokens action was triggered by watch")
 				tm.sync()
 			case <-ticker.C:
-				tm.logger.Info("Sync tokens action was triggered by timer")
+				tm.logger.Debug("Sync tokens action was triggered by timer")
 				tm.sync()
 			}
 		}

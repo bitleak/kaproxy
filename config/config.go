@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -120,6 +121,20 @@ type duration struct {
 	time.Duration
 }
 
+func (d duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Duration.String())
+}
+
+func (d *duration) UnmarshalJSON(b []byte) error {
+	var err error
+	var s string
+	if err = json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	d.Duration, err = time.ParseDuration(s)
+	return err
+}
+
 func (d *duration) UnmarshalText(text []byte) error {
 	var err error
 	d.Duration, err = time.ParseDuration(string(text))
@@ -132,6 +147,33 @@ func (d *duration) MarshalText() ([]byte, error) {
 
 type reset struct {
 	Reset int64
+}
+
+func (r reset) MarshalJSON() ([]byte, error) {
+	switch r.Reset {
+	case sarama.OffsetOldest:
+		return json.Marshal("oldest")
+	case sarama.OffsetNewest:
+		return json.Marshal("newest")
+	default:
+		return nil, errors.New("invalid offset auto reset configuration")
+	}
+}
+
+func (r *reset) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "oldest":
+		r.Reset = sarama.OffsetOldest
+	case "newest":
+		r.Reset = sarama.OffsetNewest
+	default:
+		return errors.New("offset auto reset must be oldest or newest")
+	}
+	return nil
 }
 
 func (r *reset) UnmarshalText(text []byte) error {

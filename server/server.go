@@ -156,7 +156,7 @@ func HandleUserCmd(cmd, pidFile string) error {
 // Stop proxy
 func Stop() {
 	srv.consumer.Stop()
-	log.Logger.Warn("server release all consumer group")
+	log.Logger.Info("server release all consumer group")
 
 	srv.stop <- true
 }

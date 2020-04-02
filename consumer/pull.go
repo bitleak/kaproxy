@@ -67,6 +67,8 @@ func newPuller(cluster *Consumer) (*Puller, error) {
 }
 
 func (p *Puller) Start() error {
+	util.ZKCreatePersistentPath(p.cluster.zkCli, proxyIDDir, nil)
+
 	p.stopper = make(chan struct{})
 	go p.watchProxyListLoop()
 	go p.loop(5 * time.Second)

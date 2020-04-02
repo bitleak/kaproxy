@@ -77,7 +77,7 @@ func (c *Consumer) Stop() {
 	if err != nil {
 		log.Logger.Errorf("puller stop failed, %s", err.Error())
 	} else {
-		log.Logger.Warn("puller is stop")
+		log.Logger.Info("puller was stopped")
 	}
 
 	err = c.controller.stop()
@@ -153,7 +153,9 @@ func (c *Consumer) ListConsumerGroup() []string {
 func (c *Consumer) ReleaseConsumerGroups() {
 	c.groups.Range(func(key, value interface{}) bool {
 		cg := value.(*consumerGroup)
-		cg.Stop()
+		if !cg.IsStopped() {
+			cg.Stop()
+		}
 		return true
 	})
 }
@@ -169,16 +171,32 @@ func (c *Consumer) GetConsumerGroupState(group string) (string, error) {
 	return "started", nil
 }
 
+func (c *Consumer) updateGroupMetadataToZK(group string, metadata *GroupMetadata) error {
+	bytes, _ := json.Marshal(metadata)
+	_, err := c.zkCli.Set("/consumers/"+group, bytes, -1)
+	return err
+}
+
 func (c *Consumer) StartConsumerGroup(group string) error {
 	cg := c.GetConsumerGroup(group)
 	if cg == nil {
 		return fmt.Errorf("group [%s] is not found", group)
 	}
-	if cg.IsStopped() {
-		c.startGroup(group)
-		return nil
+	if !cg.IsStopped() {
+		return fmt.Errorf("consumer group is running")
 	}
-	return fmt.Errorf("consumer group is running")
+
+	cg.metadata.Stopped = false
+	err := c.updateGroupMetadataToZK(group, cg.metadata)
+	if err != nil {
+		log.Logger.WithFields(logrus.Fields{
+			"group": group,
+			"err":   err,
+		}).Error("Failed to update the metadata to zk")
+		return err
+	}
+	c.startGroup(group)
+	return nil
 }
 
 func (c *Consumer) StopConsumerGroup(group string) error {
@@ -186,11 +204,20 @@ func (c *Consumer) StopConsumerGroup(group string) error {
 	if cg == nil {
 		return fmt.Errorf("group [%s] is not found", group)
 	}
-	if !cg.IsStopped() {
-		cg.Stop()
-		return nil
+	if cg.IsStopped() {
+		return fmt.Errorf("consumer group is stopped or rebalancing")
 	}
-	return fmt.Errorf("consumer group is stopped or rebalancing")
+	cg.metadata.Stopped = true
+	err := c.updateGroupMetadataToZK(group, cg.metadata)
+	if err != nil {
+		log.Logger.WithFields(logrus.Fields{
+			"group": group,
+			"err":   err,
+		}).Error("Failed to update the metadata to zk")
+		return err
+	}
+	cg.Stop()
+	return nil
 }
 
 func (c *Consumer) blockingConsume(messages <-chan *sarama.ConsumerMessage, timeout time.Duration) (*sarama.ConsumerMessage, error) {
@@ -225,7 +252,7 @@ func (c *Consumer) Consume(group, topic string, timeout, ttr time.Duration) (mes
 		messages <-chan *sarama.ConsumerMessage
 		ok       bool
 	)
-	if cg.metadata.Semantics == atLeastOnce {
+	if cg.metadata.Semantics == SemanticAtLeastOnce {
 		um := cg.metadata.unackManager
 		if um.isStop {
 			return nil, ErrNoMessage
@@ -267,7 +294,7 @@ func (c *Consumer) ACK(token, group, topic string, partition int32, offset int64
 	if cg.IsStopped() {
 		return ErrGroupStopped
 	}
-	if cg.metadata.Semantics == atMostOnce {
+	if cg.metadata.Semantics == SemanticAtMostOnce {
 		return ErrGroupNotAllowACK
 	}
 	um := cg.metadata.unackManager
@@ -305,11 +332,11 @@ func (c *Consumer) handleMetadataChange() {
 		}
 
 		path := c.zkCli.TrimChroot(event.Path)
-		group := strings.Split(path, "consumers/")[1]
-		cg := c.GetConsumerGroup(group)
-		if cg.IsStopped() {
+		arr := strings.Split(path, "consumers/")
+		if len(arr) < 2 {
 			continue
 		}
+		group := arr[1]
 		c.delGroup(group)
 		c.startGroup(group)
 	}
@@ -340,7 +367,7 @@ func (c *Consumer) startGroup(group string) {
 		}).Warn("Failed to unmarshal group metadata")
 		return
 	}
-	if metadata.Owner != "kaproxy" {
+	if metadata.Owner != OwnerName {
 		log.Logger.WithField("group", group).Warn(
 			"Failed to start consumer group, because the owner of consumer group isn't kaproxy")
 		return
@@ -352,8 +379,11 @@ func (c *Consumer) startGroup(group string) {
 		log.Logger.WithField("err", err).Warn("Failed to new consumer group")
 		return
 	}
-
 	c.groups.Store(group, cg)
+	if metadata.Stopped {
+		log.Logger.WithField("group", group).Info("The group was stopped")
+		return
+	}
 	go cg.Start()
 	for _, topic := range metadata.Topics {
 		go func(topic string) {
@@ -373,7 +403,9 @@ func (c *Consumer) delGroup(group string) {
 	if cg == nil {
 		return
 	}
-	cg.Stop()
+	if !cg.IsStopped() {
+		cg.Stop()
+	}
 	c.groups.Delete(group)
 	log.Logger.WithField("group", group).Error("Group is stop, because zk dir is deleted")
 }
@@ -452,7 +484,7 @@ func newConsumerGroup(proxyConf *config.Config, groupID, consumerID string, meta
 	conf.OffsetAutoCommitInterval = metadata.Consumer.OffsetAutoCommitInterval.Duration
 	conf.OffsetAutoReset = metadata.Consumer.OffsetAutoReset.Reset
 	conf.ClaimPartitionRetryInterval = metadata.Consumer.ClaimPartitionRetryInterval.Duration
-	conf.OffsetAutoCommitEnable = metadata.Semantics == atMostOnce
+	conf.OffsetAutoCommitEnable = metadata.Semantics == SemanticAtMostOnce
 	conf.SaramaConfig.ChannelBufferSize = metadata.Consumer.ChannelBufferSize
 	conf.SaramaConfig.Consumer.Fetch.Default = metadata.Consumer.FetchDefault
 	conf.SaramaConfig.Consumer.MaxWaitTime = metadata.Consumer.MaxWaitTime.Duration
@@ -463,7 +495,7 @@ func newConsumerGroup(proxyConf *config.Config, groupID, consumerID string, meta
 		return nil, err
 	}
 	cg.SetLogger(log.Logger)
-	if metadata.Semantics == atLeastOnce {
+	if metadata.Semantics == SemanticAtLeastOnce {
 		metadata.unackManager = newUnackManager(groupID, consumerID, proxyConf.Consumer.UnackManagerSize, zkCli, cg)
 		cg.OnLoad(func() {
 			owners := cg.Owners()

@@ -26,13 +26,13 @@ var (
 	gcLock    sync.RWMutex
 )
 
-func handleStatus(c *gin.Context) {
+func getServiceStatus(c *gin.Context) {
 	srvStatus.lock.RLock()
 	defer srvStatus.lock.RUnlock()
 	c.JSON(srvStatus.httpCode, nil)
 }
 
-func handleSetStatus(c *gin.Context) {
+func setServiceStatus(c *gin.Context) {
 	srvStatus.lock.Lock()
 	defer srvStatus.lock.Unlock()
 
@@ -80,79 +80,24 @@ func handleLogLevel(c *gin.Context) {
 	}
 }
 
-func collectGCMetrics() {
-	gcLock.Lock()
-	defer gcLock.Unlock()
-	newGCStats := &debug.GCStats{}
-	debug.ReadGCStats(newGCStats)
-	count := newGCStats.NumGC
-	if gcStats != nil {
-		count -= gcStats.NumGC
-	}
-	metrics.GC.Num.Add(float64(count))
-	n := len(newGCStats.Pause)
-	for i := 0; i < int(count) && i < n; i++ {
-		metrics.GC.Duration.Observe(float64(newGCStats.Pause[i] / time.Millisecond))
-	}
-	gcStats = newGCStats
-}
-
 func handlePrometheusMetrics(c *gin.Context) {
-	// Collect gc metrics
-	collectGCMetrics()
+	{
+		gcLock.Lock()
+		defer gcLock.Unlock()
+		newGCStats := &debug.GCStats{}
+		debug.ReadGCStats(newGCStats)
+		count := newGCStats.NumGC
+		if gcStats != nil {
+			count -= gcStats.NumGC
+		}
+		metrics.GC.Num.Add(float64(count))
+		n := len(newGCStats.Pause)
+		for i := 0; i < int(count) && i < n; i++ {
+			metrics.GC.Duration.Observe(float64(newGCStats.Pause[i] / time.Millisecond))
+		}
+		gcStats = newGCStats
+	}
 	promhttp.Handler().ServeHTTP(c.Writer, c.Request)
-}
-
-func listConsumerGroup(c *gin.Context) {
-	groups := srv.consumer.ListConsumerGroup()
-	c.JSON(http.StatusOK, groups)
-}
-
-func handleGroup(c *gin.Context) {
-	var err error
-	group := c.Param("group")
-	action := c.Param("action")
-	logger := getLogger(c)
-	logger.WithFields(logrus.Fields{
-		"group":  group,
-		"action": action,
-	}).Info("Administrate consumer group")
-	switch action {
-	case "start":
-		err = srv.consumer.StartConsumerGroup(group)
-	case "stop":
-		err = srv.consumer.StopConsumerGroup(group)
-	default:
-		err = fmt.Errorf("unknown action %s", action)
-	}
-	if err != nil {
-		logger.Warn("Failed to administrate consumer group")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	} else {
-		c.JSON(http.StatusOK, gin.H{"result": "success"})
-	}
-}
-
-func exportConsumerGroup(c *gin.Context) {
-	group := c.Param("group")
-	info, err := srv.consumer.Export(group)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	} else {
-		c.JSON(http.StatusOK, info)
-	}
-}
-
-func getConsumerGroupState(c *gin.Context) {
-	group := c.Param("group")
-	state, err := srv.consumer.GetConsumerGroupState(group)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "consumer group not found"})
-		return
-	} else {
-		c.JSON(http.StatusOK, gin.H{"state": state})
-		return
-	}
 }
 
 func handlePProf(ctx *gin.Context) {
@@ -177,20 +122,21 @@ func setupAdminRouter(engine *gin.Engine) {
 	devops := engine.Group("devops")
 	{
 		devops.GET("/version", showVersion)
-		devops.GET("/status", handleStatus)
+		devops.GET("/status", getServiceStatus)
+		devops.POST("/status", setServiceStatus)
 	}
 	log := engine.Group("log")
 	{
 		log.GET("/level", handleLogLevel)
 		log.POST("/level", handleLogLevel)
 	}
-	group := engine.Group("group")
+	group := engine.Group("groups")
 	{
-		group.GET("", listConsumerGroup)
-		group.GET("/", listConsumerGroup)
-		group.POST("/:group/:action", handleGroup)
-		group.GET("/:group/state", getConsumerGroupState)
-		group.GET("/:group/export", exportConsumerGroup)
+		group.GET("", listConsumerGroups)
+		group.GET("/", listConsumerGroups)
+		group.POST("/:group", createConsumerGroup)
+		group.DELETE("/:group", deleteConsumerGroup)
+		group.GET("/:group/:action", setConsumerGroup)
 	}
 	tokens := engine.Group("tokens")
 	{

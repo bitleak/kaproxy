@@ -5,9 +5,11 @@ import (
 )
 
 type GroupMetadata struct {
-	Owner        string                `json:"owner"`
-	Topics       []string              `json:"topics"`
-	Semantics    string                `json:"semantics"`
-	Consumer     config.ConsumerConfig `json:"consumer"`
+	Owner     string                `json:"owner"`
+	Topics    []string              `json:"topics"`
+	Semantics string                `json:"semantics"`
+	Consumer  config.ConsumerConfig `json:"consumer"`
+	Stopped   bool                  `json:"stopped"`
+
 	unackManager *unackManager
 }

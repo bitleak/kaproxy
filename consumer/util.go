@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	atMostOnce  = "atMostOnce"
-	atLeastOnce = "atLeastOnce"
+	SemanticAtMostOnce  = "atMostOnce"
+	SemanticAtLeastOnce = "atLeastOnce"
+
+	OwnerName = "kaproxy"
 )
 
 const (

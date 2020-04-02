@@ -28,6 +28,7 @@ type controller struct {
 func newController(cluster *Consumer) *controller {
 	return &controller{
 		cluster: cluster,
+		stopper: make(chan struct{}),
 	}
 }
 
@@ -35,41 +36,40 @@ func (c *controller) start() {
 	defer util.WithRecover(log.Logger)
 	zkClient := c.cluster.zkCli
 	proxyID := c.cluster.proxyID
-	c.stopper = make(chan struct{})
 	for {
 		select {
 		case <-c.stopper:
 			return
 		default:
-
 		}
+
 		err := util.ZKCreateEphemeralPath(zkClient, controllerPath, []byte(proxyID))
 		if err != nil && err != zk.ErrNodeExists {
-			log.Logger.Errorf("Failed to create controller patch in zk: %s", err)
+			log.Logger.Errorf("Failed to create controller path in ZK: %s", err)
 			return
 		}
 		controller, _, watcher, err := zkClient.GetW(controllerPath)
 		if err != nil {
-			log.Logger.Errorf("Failed to watch controller patch in zk: %s", err)
+			log.Logger.Errorf("Failed to watch controller path in ZK: %s", err)
 			return
 		}
 
-		log.Logger.Infof("Controller proxy id is %s", string(controller))
 		if bytes.Compare(controller, []byte(proxyID)) == 0 {
-			c.masterCollectLoop(watcher.EvCh)
+			log.Logger.Infof("The proxy[%s] would become controller", string(controller))
+			c.masterLoop(watcher.EvCh)
 		} else {
-			c.salveBlock(watcher.EvCh)
+			log.Logger.Infof("The proxy[%s] would become slave", string(controller))
+			c.slaveLoop(watcher.EvCh)
 		}
-
 	}
 }
 
 func (c *controller) stop() error {
+	close(c.stopper)
 	return c.cluster.zkCli.Delete(controllerPath, -1)
 }
 
-func (c *controller) masterCollectLoop(ch <-chan zk.Event) {
-	// trigger update group topic's weights when first setup
+func (c *controller) masterLoop(ch <-chan zk.Event) {
 	c.calcAndUpdateGroupWeights()
 	//TODO: configure sleep time
 	ticker := time.NewTicker(5 * time.Second)
@@ -77,21 +77,23 @@ func (c *controller) masterCollectLoop(ch <-chan zk.Event) {
 	for {
 		select {
 		case <-ch:
-			log.Logger.Info("controller change trigger")
+			log.Logger.Info("the controller would be exited, as event changed was received")
 			return
 		case <-ticker.C:
 			c.calcAndUpdateGroupWeights()
 		case <-c.stopper:
+			log.Logger.Info("the controller would be exited, as the stop singal was received")
 			return
 		}
 	}
 }
 
-func (c *controller) salveBlock(ch <-chan zk.Event) {
+func (c *controller) slaveLoop(ch <-chan zk.Event) {
 	select {
 	case <-ch:
-		log.Logger.Info("controller change trigger")
+		log.Logger.Info("the slave would be exited, as event changed was received")
 	case <-c.stopper:
+		log.Logger.Info("the slave would be exited, as the stop singal was received")
 	}
 }
 
