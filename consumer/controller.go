@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/util"
 	"github.com/meitu/go-zookeeper/zk"
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/util"
 	"github.com/sirupsen/logrus"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/meitu/kaproxy/server"
+	"github.com/bitleak/kaproxy/server"
 )
 
 type options struct {

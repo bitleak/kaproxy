@@ -1,4 +1,4 @@
-module github.com/meitu/kaproxy
+module github.com/bitleak/kaproxy
 
 go 1.13
 

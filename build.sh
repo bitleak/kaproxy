@@ -52,7 +52,7 @@ if test -z "$TARGET_ARCH"; then
 fi
 
 TARGET_NAME=kaproxy-server
-GO_PROJECT=github.com/meitu/kaproxy
+GO_PROJECT=github.com/bitleak/kaproxy
 BUILD_DIR=./_build
 VERSION=`grep "^VERSION" Changelog | head -1 | cut -d " " -f2`
 BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'`

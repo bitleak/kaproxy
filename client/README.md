@@ -3,12 +3,12 @@
 ## install
 
 ```shell
-go get github.com/meitu/kaproxy
+go get github.com/bitleak/kaproxy
 ```
 
 ## Usage
 ```golang
-import github.com/meitu/kaproxy/client
+import github.com/bitleak/kaproxy/client
 
 c := client.NewKaproxyClient(host, port, token)
 

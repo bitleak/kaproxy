@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitleak/kaproxy/config"
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/metrics"
+	"github.com/bitleak/kaproxy/util"
+	"github.com/bitleak/kaproxy/xor"
 	"github.com/meitu/go-zookeeper/zk"
-	"github.com/meitu/kaproxy/config"
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/metrics"
-	"github.com/meitu/kaproxy/util"
-	"github.com/meitu/kaproxy/xor"
 	"github.com/meitu/zk_wrapper"
 	"github.com/sirupsen/logrus"
 )

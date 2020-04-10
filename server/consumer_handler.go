@@ -7,9 +7,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/Shopify/sarama"
+	"github.com/bitleak/kaproxy/consumer"
+	"github.com/bitleak/kaproxy/log"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/consumer"
-	"github.com/meitu/kaproxy/log"
 	"github.com/sirupsen/logrus"
 )
 

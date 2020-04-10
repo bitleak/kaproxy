@@ -3,9 +3,9 @@ package server
 import (
 	"net/http"
 
+	"github.com/bitleak/kaproxy/producer"
+	"github.com/bitleak/kaproxy/util"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/producer"
-	"github.com/meitu/kaproxy/util"
 	"github.com/sirupsen/logrus"
 )
 

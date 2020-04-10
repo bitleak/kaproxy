@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/metrics"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/metrics"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 )

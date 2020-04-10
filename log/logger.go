@@ -3,7 +3,7 @@ package log
 import (
 	"time"
 
-	"github.com/meitu/kaproxy/log/hooks"
+	"github.com/bitleak/kaproxy/log/hooks"
 	"github.com/sirupsen/logrus"
 )
 

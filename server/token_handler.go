@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bitleak/kaproxy/auth"
+	"github.com/bitleak/kaproxy/util"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/auth"
-	"github.com/meitu/kaproxy/util"
 	"github.com/sirupsen/logrus"
 )
 

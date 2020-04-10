@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/util"
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/util"
 
 	"github.com/Shopify/sarama"
 	"github.com/meitu/go-consumergroup"

@@ -13,14 +13,14 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/bitleak/kaproxy/auth"
+	"github.com/bitleak/kaproxy/config"
+	"github.com/bitleak/kaproxy/consumer"
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/metrics"
+	"github.com/bitleak/kaproxy/producer"
+	"github.com/bitleak/kaproxy/util"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/auth"
-	"github.com/meitu/kaproxy/config"
-	"github.com/meitu/kaproxy/consumer"
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/metrics"
-	"github.com/meitu/kaproxy/producer"
-	"github.com/meitu/kaproxy/util"
 	"github.com/meitu/zk_wrapper"
 )
 

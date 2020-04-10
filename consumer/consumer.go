@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/bitleak/kaproxy/config"
+	"github.com/bitleak/kaproxy/log"
+	"github.com/bitleak/kaproxy/util"
 	consumergroup "github.com/meitu/go-consumergroup"
 	"github.com/meitu/go-zookeeper/zk"
-	"github.com/meitu/kaproxy/config"
-	"github.com/meitu/kaproxy/log"
-	"github.com/meitu/kaproxy/util"
 	"github.com/meitu/zk_wrapper"
 	"github.com/sirupsen/logrus"
 )

@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/meitu/kaproxy/util"
+	"github.com/bitleak/kaproxy/util"
 
+	"github.com/bitleak/kaproxy/consumer"
 	"github.com/meitu/go-zookeeper/zk"
-	"github.com/meitu/kaproxy/consumer"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"

@@ -1,7 +1,7 @@
 package consumer
 
 import (
-	"github.com/meitu/kaproxy/config"
+	"github.com/bitleak/kaproxy/config"
 )
 
 type GroupMetadata struct {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/meitu/kaproxy/producer"
+	"github.com/bitleak/kaproxy/producer"
 )
 
 func produceMessage(key, value, partitioner string) ([]byte, error) {

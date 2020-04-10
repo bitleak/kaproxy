@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/meitu/kaproxy/config"
+	"github.com/bitleak/kaproxy/config"
 )
 
 type ProduceResponse struct {

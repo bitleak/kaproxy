@@ -9,8 +9,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/bitleak/kaproxy/util"
 	"github.com/meitu/go-zookeeper/zk"
-	"github.com/meitu/kaproxy/util"
 	"github.com/meitu/zk_wrapper"
 )
 

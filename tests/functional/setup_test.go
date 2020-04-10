@@ -7,8 +7,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/Shopify/sarama"
-	"github.com/meitu/kaproxy/config"
-	"github.com/meitu/kaproxy/server"
+	"github.com/bitleak/kaproxy/config"
+	"github.com/bitleak/kaproxy/server"
 )
 
 const (

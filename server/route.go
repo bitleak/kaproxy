@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/bitleak/kaproxy/metrics"
 	"github.com/gin-gonic/gin"
-	"github.com/meitu/kaproxy/metrics"
 )
 
 func filterTopicReq(c *gin.Context) {
