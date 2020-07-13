@@ -80,6 +80,7 @@ type ServerConfig struct {
 	AdminHost       string
 	AdminPort       int
 	LogDir          string
+	LogFormat       string
 	AccessLogEnable bool
 }
 

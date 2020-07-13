@@ -81,7 +81,7 @@ type batchReplicator struct {
 
 func NewBatchReplicator(r *replicator, batchSize int) *batchReplicator {
 	if batchSize <= 0 {
-		log.Logger.Fatal("Invalid batch size")
+		log.ErrorLogger.Fatal("Invalid batch size")
 		return nil
 	}
 	return &batchReplicator{
@@ -95,13 +95,13 @@ func NewBatchReplicator(r *replicator, batchSize int) *batchReplicator {
 }
 
 func (b *batchReplicator) batchWorker(partitionID int32, batchID, key string, digestCh chan []byte) func() {
-	log.Logger.Debugf("Batch [%s] worker start", batchID)
+	log.ErrorLogger.Debugf("Batch [%s] worker start", batchID)
 	b.wg.Add(1)
 	metrics.Batch.Start.Inc()
 	b.sendMetaMessage(partitionID, batchID, key, MetaStart, "")
 	checksum := xor.New()
 	return func() {
-		defer util.WithRecover(log.Logger, b.wg.Done)
+		defer util.WithRecover(log.ErrorLogger, b.wg.Done)
 	UserMsg:
 		for i := 0; i < b.size; i++ {
 			select {
@@ -114,7 +114,7 @@ func (b *batchReplicator) batchWorker(partitionID int32, batchID, key string, di
 		}
 		close(digestCh)
 		b.sendMetaMessage(partitionID, batchID, key, MetaStop, base64.StdEncoding.EncodeToString(checksum.Sum(nil)))
-		log.Logger.Debugf("Batch [%s] worker stop", batchID)
+		log.ErrorLogger.Debugf("Batch [%s] worker stop", batchID)
 		metrics.Batch.Stop.Inc()
 	}
 }
@@ -155,7 +155,7 @@ func (b *batchReplicator) GetBatch(partitionID int32, key string) (batchID strin
 	defer b.mu.Unlock()
 	for {
 		if b.counter[partitionID] == 0 {
-			log.Logger.Debug("New batch")
+			log.ErrorLogger.Debug("New batch")
 			b.current[partitionID] = genBatchId()
 			ch := make(chan []byte, 5)
 			b.digestCh[partitionID] = ch
@@ -240,7 +240,7 @@ func (r *replicator) Allow(topic string) bool {
 func (r *replicator) loop() {
 	for {
 		if err := r.updateACL(); err != nil {
-			log.Logger.WithFields(logrus.Fields{
+			log.ErrorLogger.WithFields(logrus.Fields{
 				"err": err,
 			}).Warn("update acl failed")
 		}

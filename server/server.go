@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"net/http/httputil"
 	"os"
 	"os/signal"
@@ -21,6 +22,7 @@ import (
 	"github.com/bitleak/kaproxy/producer"
 	"github.com/bitleak/kaproxy/util"
 	"github.com/gin-gonic/gin"
+	"github.com/meitu/go-zookeeper/zk"
 	"github.com/meitu/zk_wrapper"
 )
 
@@ -38,7 +40,7 @@ type server struct {
 var srv *server
 
 func serverRecovery() gin.HandlerFunc {
-	logger := log.Logger
+	logger := log.ErrorLogger
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -56,14 +58,14 @@ func serverRecovery() gin.HandlerFunc {
 func genRequestId(c *gin.Context) {
 	reqId := util.GenUniqueID()
 	c.Request.Header.Add("X-Request-Id", reqId)
-	c.Set("logger", log.Logger.WithField("req_id", reqId))
+	c.Set("logger", log.ErrorLogger.WithField("req_id", reqId))
 	c.Header("X-Request-Id", reqId)
 }
 
-func getDefaultGinEngine(name, logDir string) *gin.Engine {
+func getDefaultGinEngine(accessLogEnable bool, accessLogger *logrus.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
-	engine.Use(serverRecovery(), genRequestId)
+	engine.Use(serverRecovery(), genRequestId, AccessLogMiddleware(accessLogEnable, accessLogger))
 	return engine
 }
 
@@ -156,7 +158,7 @@ func HandleUserCmd(cmd, pidFile string) error {
 // Stop proxy
 func Stop() {
 	srv.consumer.Stop()
-	log.Logger.Info("server release all consumer group")
+	log.ErrorLogger.Info("server release all consumer group")
 
 	srv.stop <- true
 }
@@ -165,11 +167,11 @@ func initServer(conf *config.Config) error {
 	srv = new(server)
 	srv.stop = make(chan bool, 0)
 
-	err := log.Init(conf.Server.LogDir)
+	err := log.Init(conf.Server.LogFormat, conf.Server.LogDir)
 	if err != nil {
 		return err
 	}
-
+	zk.DefaultLogger = log.ErrorLogger
 	srv.zkCli, _, err = zk_wrapper.Connect(conf.Kafka.Zookeepers, conf.Kafka.ZKSessionTimeout.Duration)
 	if err != nil {
 		return err
@@ -187,7 +189,7 @@ func initServer(conf *config.Config) error {
 	consumeConf.Consumer.Return.Errors = true
 	consumeConf.Version = conf.Kafka.Version.Version
 	srv.saramaCli, err = sarama.NewClient(conf.Kafka.Brokers, consumeConf)
-	srv.tokenManager, err = auth.NewTokenManager(srv.zkCli, log.Logger)
+	srv.tokenManager, err = auth.NewTokenManager(srv.zkCli, log.ErrorLogger)
 	return err
 }
 
@@ -208,7 +210,7 @@ func Start(confFile, pidFile string) error {
 	if err != nil {
 		return fmt.Errorf("failed to init producer: %s", err)
 	}
-	log.Logger.Infof("Init producer succ with brokers %s", conf.Kafka.Brokers)
+	log.ErrorLogger.Infof("Init producer succ with brokers %s", conf.Kafka.Brokers)
 
 	srv.consumer, err = consumer.NewConsumer(srv.saramaCli, conf)
 	if err != nil {
@@ -218,31 +220,31 @@ func Start(confFile, pidFile string) error {
 	if err != nil {
 		return fmt.Errorf("start consumer failed, %s", err)
 	}
-	log.Logger.Infof("Init consumer succ with brokers %s, zookeepers %s", conf.Kafka.Brokers, conf.Kafka.Zookeepers)
+	log.ErrorLogger.Infof("Init consumer succ with brokers %s, zookeepers %s", conf.Kafka.Brokers, conf.Kafka.Zookeepers)
 
 	// registe prometheus metrics
 	metrics.Init()
 
 	// run proxy engine
-	proxyEngine := getDefaultGinEngine("kaproxy", conf.Server.LogDir)
+	proxyEngine := getDefaultGinEngine(conf.Server.AccessLogEnable, log.AccessLogger)
 	setupProxyRouters(proxyEngine)
 	runEngine(proxyEngine, conf.Server.Host, conf.Server.Port)
 	// run admin engine
-	adminEngine := getDefaultGinEngine("admin", conf.Server.LogDir)
+	adminEngine := getDefaultGinEngine(conf.Server.AccessLogEnable, log.AccessLogger)
 	setupAdminRouter(adminEngine)
 	runEngine(adminEngine, conf.Server.AdminHost, conf.Server.AdminPort)
 
 	writePidFile(pidFile)
 	registerSignal()
 
-	log.Logger.Infof("Start server succ, listen on %s:%d and %s:%d",
+	log.ErrorLogger.Infof("Start server succ, listen on %s:%d and %s:%d",
 		conf.Server.Host, conf.Server.Port, conf.Server.AdminHost, conf.Server.AdminPort)
 
 	<-srv.stop
 	srv.producer.Close()
 	srv.zkCli.Close()
-	log.Logger.Info("server have been stopped")
-	logger, ok := log.Logger.Out.(*os.File)
+	log.ErrorLogger.Info("server have been stopped")
+	logger, ok := log.ErrorLogger.Out.(*os.File)
 	if ok {
 		logger.Sync()
 		logger.Close()
