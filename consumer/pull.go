@@ -87,7 +87,7 @@ func (p *Puller) watchProxyListLoop() {
 	for {
 		proxyList, _, watcher, err := zkClient.ChildrenW(proxyIDDir)
 		if err != nil {
-			log.Logger.Errorf("Failed to watch proxy list, %s", err)
+			log.ErrorLogger.Errorf("Failed to watch proxy list, %s", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -100,7 +100,7 @@ func (p *Puller) watchProxyListLoop() {
 		case <-p.stopper:
 			return
 		case <-watcher.EvCh:
-			log.Logger.Info("Proxy list change")
+			log.ErrorLogger.Info("Proxy list change")
 		}
 	}
 }
@@ -144,7 +144,7 @@ func (p *Puller) PullFromPeers(group, topic, token string, timeout, ttr uint64, 
 }
 
 func (p *Puller) loop(interval time.Duration) {
-	defer util.WithRecover(log.Logger)
+	defer util.WithRecover(log.ErrorLogger)
 	ticker := time.NewTicker(interval)
 	for {
 		<-ticker.C
@@ -168,7 +168,7 @@ func (p *Puller) updateWeights(group, topic string) {
 	zkPath := fmt.Sprintf(weightPath, group, topic)
 	weightsBytes, _, err := zkClient.Get(zkPath)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"topic": topic,
 			"err":   err,
@@ -177,7 +177,7 @@ func (p *Puller) updateWeights(group, topic string) {
 	}
 	err = json.Unmarshal(weightsBytes, &topicWeights)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"topic": topic,
 			"err":   err,

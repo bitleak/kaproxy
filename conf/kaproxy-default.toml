@@ -4,6 +4,8 @@ Port = 8080
 AdminHost = "127.0.0.1"
 AdminPort = 8081
 LogDir = "/www/privdata/kaproxy/logs"
+LogFormat = "text" # json
+AccessLogEnable = false
 
 [Kafka]
 Brokers = ["127.0.0.1:9092"]

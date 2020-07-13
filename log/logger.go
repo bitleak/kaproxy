@@ -9,17 +9,31 @@ import (
 
 const UpgradeKey = hooks.UpgradeKey
 
-var Logger *logrus.Logger
+var (
+	AccessLogger *logrus.Logger
+	ErrorLogger  *logrus.Logger
+)
 
-func Init(logDir string) error {
-	Logger = logrus.New()
+func Init(logFormat, logDir string) error {
+	AccessLogger = logrus.New()
+	ErrorLogger = logrus.New()
+	if logFormat == "json" {
+		AccessLogger.SetFormatter(&logrus.JSONFormatter{})
+		ErrorLogger.SetFormatter(&logrus.JSONFormatter{})
+	}
 
-	Logger.Hooks.Add(hooks.NewUpgradeHook(50, 3*time.Second))
-	rollHook, err := hooks.NewRollHook(Logger, logDir, "kaproxy")
+	accessRollHook, err := hooks.NewRollHook(AccessLogger, logDir, "access")
 	if err != nil {
 		return err
 	}
-	Logger.Hooks.Add(rollHook)
-	Logger.Hooks.Add(hooks.NewSourceHook(logrus.WarnLevel))
+	AccessLogger.Hooks.Add(accessRollHook)
+	ErrorLogger.Hooks.Add(hooks.NewUpgradeHook(50, 3*time.Second))
+	errorRollHook, err := hooks.NewRollHook(ErrorLogger, logDir, "kaproxy")
+	if err != nil {
+		return err
+	}
+	ErrorLogger.Hooks.Add(errorRollHook)
+	ErrorLogger.Hooks.Add(hooks.NewSourceHook(logrus.WarnLevel))
+
 	return nil
 }

@@ -46,6 +46,12 @@ func NewRollHook(logger *logrus.Logger, dir, name string) (*RollHook, error) {
 }
 
 func (rh *RollHook) openNewFile() (*os.File, error) {
+	if rh.dir == "" {
+		if rh.name == "access" {
+			return os.Stdout, nil
+		}
+		return os.Stderr, nil
+	}
 	_, err := os.Stat(rh.dir)
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(rh.dir, 0755)
@@ -77,6 +83,9 @@ func (rh *RollHook) roll() error {
 	rh.lock.Lock()
 	defer rh.lock.Unlock()
 
+	if rh.dir == "" {
+		return nil
+	}
 	// check again, someone may have rolled at the same time
 	if !rh.needRoll() {
 		return nil

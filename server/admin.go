@@ -40,11 +40,11 @@ func setServiceStatus(c *gin.Context) {
 	switch status {
 	case "disable":
 		srvStatus.httpCode = http.StatusServiceUnavailable
-		log.Logger.Info("service is offline manually")
+		log.ErrorLogger.Info("service is offline manually")
 		c.JSON(http.StatusOK, gin.H{"msg": "service is offline manually"})
 	case "enable":
 		srvStatus.httpCode = http.StatusOK
-		log.Logger.Info("service is running")
+		log.ErrorLogger.Info("service is running")
 		c.JSON(http.StatusOK, gin.H{"msg": "service is running"})
 	default:
 		c.JSON(http.StatusOK, gin.H{"error": "invalid status"})
@@ -63,14 +63,14 @@ func showVersion(c *gin.Context) {
 func handleLogLevel(c *gin.Context) {
 	switch c.Request.Method {
 	case "GET":
-		c.JSON(http.StatusOK, log.Logger.Level.String())
+		c.JSON(http.StatusOK, log.ErrorLogger.Level.String())
 
 	case "POST":
 		newLevel, err := logrus.ParseLevel(c.PostForm("loglevel"))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
-			log.Logger.Level = newLevel
+			log.ErrorLogger.Level = newLevel
 			msg := fmt.Sprintf("set loglevel to %s succ", newLevel.String())
 			c.JSON(http.StatusOK, gin.H{"msg": msg})
 		}

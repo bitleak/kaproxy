@@ -33,7 +33,7 @@ func newController(cluster *Consumer) *controller {
 }
 
 func (c *controller) start() {
-	defer util.WithRecover(log.Logger)
+	defer util.WithRecover(log.ErrorLogger)
 	zkClient := c.cluster.zkCli
 	proxyID := c.cluster.proxyID
 	for {
@@ -45,20 +45,20 @@ func (c *controller) start() {
 
 		err := util.ZKCreateEphemeralPath(zkClient, controllerPath, []byte(proxyID))
 		if err != nil && err != zk.ErrNodeExists {
-			log.Logger.Errorf("Failed to create controller path in ZK: %s", err)
+			log.ErrorLogger.Errorf("Failed to create controller path in ZK: %s", err)
 			return
 		}
 		controller, _, watcher, err := zkClient.GetW(controllerPath)
 		if err != nil {
-			log.Logger.Errorf("Failed to watch controller path in ZK: %s", err)
+			log.ErrorLogger.Errorf("Failed to watch controller path in ZK: %s", err)
 			return
 		}
 
 		if bytes.Compare(controller, []byte(proxyID)) == 0 {
-			log.Logger.Infof("The proxy[%s] would become controller", string(controller))
+			log.ErrorLogger.Infof("The proxy[%s] would become controller", string(controller))
 			c.masterLoop(watcher.EvCh)
 		} else {
-			log.Logger.Infof("The proxy[%s] would become slave", string(controller))
+			log.ErrorLogger.Infof("The proxy[%s] would become slave", string(controller))
 			c.slaveLoop(watcher.EvCh)
 		}
 	}
@@ -77,12 +77,12 @@ func (c *controller) masterLoop(ch <-chan zk.Event) {
 	for {
 		select {
 		case <-ch:
-			log.Logger.Info("the controller would be exited, as event changed was received")
+			log.ErrorLogger.Info("the controller would be exited, as event changed was received")
 			return
 		case <-ticker.C:
 			c.calcAndUpdateGroupWeights()
 		case <-c.stopper:
-			log.Logger.Info("the controller would be exited, as the stop singal was received")
+			log.ErrorLogger.Info("the controller would be exited, as the stop singal was received")
 			return
 		}
 	}
@@ -91,9 +91,9 @@ func (c *controller) masterLoop(ch <-chan zk.Event) {
 func (c *controller) slaveLoop(ch <-chan zk.Event) {
 	select {
 	case <-ch:
-		log.Logger.Info("the slave would be exited, as event changed was received")
+		log.ErrorLogger.Info("the slave would be exited, as event changed was received")
 	case <-c.stopper:
-		log.Logger.Info("the slave would be exited, as the stop singal was received")
+		log.ErrorLogger.Info("the slave would be exited, as the stop singal was received")
 	}
 }
 
@@ -135,7 +135,7 @@ func (c *controller) calcAndUpdateTopicWeights(group, topic string) {
 	}
 	err := c.writeProxyWeightsToZK(group, topic, proxyWeights)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"topic": topic,
 			"err":   err,
@@ -151,7 +151,7 @@ func (c *controller) getLagsGroupByProxy(group, topic string) (map[string]int64,
 
 	partitions, err := saramaClient.Partitions(topic)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"topic": topic,
 			"err":   err,
@@ -162,7 +162,7 @@ func (c *controller) getLagsGroupByProxy(group, topic string) (map[string]int64,
 	for _, partID := range partitions {
 		offset, _, err := getConsumerOffset(zkClient, group, topic, partID)
 		if err != nil && err != zk.ErrNoNode {
-			log.Logger.WithFields(logrus.Fields{
+			log.ErrorLogger.WithFields(logrus.Fields{
 				"group":     group,
 				"topic":     topic,
 				"partition": partID,
@@ -175,7 +175,7 @@ func (c *controller) getLagsGroupByProxy(group, topic string) (map[string]int64,
 		}
 		logSize, err := saramaClient.GetOffset(topic, partID, sarama.OffsetNewest)
 		if err != nil {
-			log.Logger.WithFields(logrus.Fields{
+			log.ErrorLogger.WithFields(logrus.Fields{
 				"group":     group,
 				"topic":     topic,
 				"partition": partID,
@@ -186,7 +186,7 @@ func (c *controller) getLagsGroupByProxy(group, topic string) (map[string]int64,
 		lag := logSize - offset
 		owner, err := getConsumerOwner(zkClient, group, topic, partID)
 		if err != nil {
-			log.Logger.WithFields(logrus.Fields{
+			log.ErrorLogger.WithFields(logrus.Fields{
 				"group":     group,
 				"topic":     topic,
 				"partition": partID,

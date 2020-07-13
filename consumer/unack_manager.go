@@ -244,7 +244,7 @@ func (u *unackManager) start(owners map[string]map[int32]string, chs map[string]
 		u.topicManagers[topic] = tm
 		u.wg.Add(1)
 		go func(messageCh <-chan *sarama.ConsumerMessage) {
-			defer util.WithRecover(log.Logger)
+			defer util.WithRecover(log.ErrorLogger)
 			defer u.wg.Done()
 			tm.transfer(messageCh)
 		}(chs[topic])

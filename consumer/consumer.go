@@ -75,28 +75,28 @@ func (c *Consumer) Stop() {
 	c.ReleaseConsumerGroups()
 	err := c.Puller.Close()
 	if err != nil {
-		log.Logger.Errorf("puller stop failed, %s", err.Error())
+		log.ErrorLogger.Errorf("puller stop failed, %s", err.Error())
 	} else {
-		log.Logger.Info("puller was stopped")
+		log.ErrorLogger.Info("puller was stopped")
 	}
 
 	err = c.controller.stop()
 	if err != nil {
-		log.Logger.Errorf("Failed to stop monitor: %s", err)
+		log.ErrorLogger.Errorf("Failed to stop monitor: %s", err)
 	} else {
-		log.Logger.Info("monitor is stopped")
+		log.ErrorLogger.Info("monitor is stopped")
 	}
 	close(c.stopper)
 	c.zkCli.Close()
 }
 
 func (c *Consumer) watchConsumerGroup() {
-	defer util.WithRecover(log.Logger)
+	defer util.WithRecover(log.ErrorLogger)
 
 	for {
 		newGroupList, _, groupListChange, err := c.zkCli.ChildrenW(consumerGroupsDir)
 		if err != nil {
-			log.Logger.WithField("err", err).Warn("Failed to get and watch consumer group list")
+			log.ErrorLogger.WithField("err", err).Warn("Failed to get and watch consumer group list")
 			time.Sleep(3 * time.Second)
 			continue
 		}
@@ -189,7 +189,7 @@ func (c *Consumer) StartConsumerGroup(group string) error {
 	cg.metadata.Stopped = false
 	err := c.updateGroupMetadataToZK(group, cg.metadata)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"err":   err,
 		}).Error("Failed to update the metadata to zk")
@@ -210,7 +210,7 @@ func (c *Consumer) StopConsumerGroup(group string) error {
 	cg.metadata.Stopped = true
 	err := c.updateGroupMetadataToZK(group, cg.metadata)
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"group": group,
 			"err":   err,
 		}).Error("Failed to update the metadata to zk")
@@ -350,7 +350,7 @@ func (c *Consumer) startGroup(group string) {
 		return
 	}
 	if err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"err":   err,
 			"group": group,
 		}).Warn("Failed to get and watch consumer group")
@@ -361,14 +361,14 @@ func (c *Consumer) startGroup(group string) {
 		Consumer: c.conf.Consumer,
 	}
 	if err := json.Unmarshal(data, metadata); err != nil {
-		log.Logger.WithFields(logrus.Fields{
+		log.ErrorLogger.WithFields(logrus.Fields{
 			"err":   err,
 			"group": group,
 		}).Warn("Failed to unmarshal group metadata")
 		return
 	}
 	if metadata.Owner != OwnerName {
-		log.Logger.WithField("group", group).Warn(
+		log.ErrorLogger.WithField("group", group).Warn(
 			"Failed to start consumer group, because the owner of consumer group isn't kaproxy")
 		return
 	}
@@ -376,12 +376,12 @@ func (c *Consumer) startGroup(group string) {
 	consumerID := genConsumerID(c.proxyID, group)
 	cg, err := newConsumerGroup(c.conf, group, consumerID, metadata, c.zkCli)
 	if err != nil {
-		log.Logger.WithField("err", err).Warn("Failed to new consumer group")
+		log.ErrorLogger.WithField("err", err).Warn("Failed to new consumer group")
 		return
 	}
 	c.groups.Store(group, cg)
 	if metadata.Stopped {
-		log.Logger.WithField("group", group).Info("The group was stopped")
+		log.ErrorLogger.WithField("group", group).Info("The group was stopped")
 		return
 	}
 	go cg.Start()
@@ -389,7 +389,7 @@ func (c *Consumer) startGroup(group string) {
 		go func(topic string) {
 			errChan, _ := cg.GetErrors(topic)
 			for err := range errChan {
-				log.Logger.WithFields(logrus.Fields{
+				log.ErrorLogger.WithFields(logrus.Fields{
 					"err":   err,
 					"group": group,
 				}).Error("received sarama error")
@@ -407,7 +407,7 @@ func (c *Consumer) delGroup(group string) {
 		cg.Stop()
 	}
 	c.groups.Delete(group)
-	log.Logger.WithField("group", group).Error("Group is stop, because zk dir is deleted")
+	log.ErrorLogger.WithField("group", group).Error("Group is stop, because zk dir is deleted")
 }
 
 //note: EventCallback will block the subsequent operations,
@@ -494,7 +494,7 @@ func newConsumerGroup(proxyConf *config.Config, groupID, consumerID string, meta
 	if err != nil {
 		return nil, err
 	}
-	cg.SetLogger(log.Logger)
+	cg.SetLogger(log.ErrorLogger)
 	if metadata.Semantics == SemanticAtLeastOnce {
 		metadata.unackManager = newUnackManager(groupID, consumerID, proxyConf.Consumer.UnackManagerSize, zkCli, cg)
 		cg.OnLoad(func() {
