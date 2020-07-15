@@ -9,8 +9,8 @@ else
 host="127.0.0.1"
 fi
 
-out=`curl -i -s -o /dev/null -w %{http_code} -d "status=200" \
-    "http://$host:8080/devops/status" \
+out=`curl -X POST -i -s -o /dev/null -w %{http_code} \
+    "http://$host:8080/devops/status?status=enable" \
     2>/dev/null`
 if [ $out -eq 200 ]; then
     echo "Set 200 success"
