@@ -31,7 +31,7 @@ if err !=nil {
 resp, err = c.ProduceWithHash(topic, msg)
 
 // produce to specified partition
-resp, err = c.ProduceWithPartition(topic, msg)
+resp, err = c.ProduceWithPartition(topic, partition, msg)
 ```
 
 ### Consumer
