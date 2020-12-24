@@ -105,9 +105,9 @@ func setConsumerGroup(c *gin.Context) {
 	}).Info("Administrate consumer group")
 	switch action {
 	case "start":
-		err = srv.consumer.StartConsumerGroup(group)
+		err = srv.consumer.UpdateConsumerGroupState(group, false)
 	case "stop":
-		err = srv.consumer.StopConsumerGroup(group)
+		err = srv.consumer.UpdateConsumerGroupState(group, true)
 	case "export":
 		exportConsumerGroup(c)
 		return

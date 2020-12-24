@@ -12,7 +12,7 @@ import (
 	"github.com/bitleak/kaproxy/config"
 	"github.com/bitleak/kaproxy/log"
 	"github.com/bitleak/kaproxy/util"
-	consumergroup "github.com/meitu/go-consumergroup"
+	"github.com/meitu/go-consumergroup"
 	"github.com/meitu/go-zookeeper/zk"
 	"github.com/meitu/zk_wrapper"
 	"github.com/sirupsen/logrus"
@@ -119,6 +119,7 @@ func (c *Consumer) watchConsumerGroup() {
 			}
 			if !exist {
 				c.delGroup(key.(string))
+				log.ErrorLogger.WithField("group", key).Error("Group was deleted")
 			}
 			return true
 		})
@@ -177,37 +178,18 @@ func (c *Consumer) updateGroupMetadataToZK(group string, metadata *GroupMetadata
 	return err
 }
 
-func (c *Consumer) StartConsumerGroup(group string) error {
+func (c *Consumer) UpdateConsumerGroupState(group string, stopped bool) error {
 	cg := c.GetConsumerGroup(group)
 	if cg == nil {
 		return fmt.Errorf("group [%s] is not found", group)
 	}
-	if !cg.IsStopped() {
-		return fmt.Errorf("consumer group is running")
-	}
-
-	cg.metadata.Stopped = false
-	err := c.updateGroupMetadataToZK(group, cg.metadata)
-	if err != nil {
-		log.ErrorLogger.WithFields(logrus.Fields{
-			"group": group,
-			"err":   err,
-		}).Error("Failed to update the metadata to zk")
-		return err
-	}
-	c.startGroup(group)
-	return nil
-}
-
-func (c *Consumer) StopConsumerGroup(group string) error {
-	cg := c.GetConsumerGroup(group)
-	if cg == nil {
-		return fmt.Errorf("group [%s] is not found", group)
-	}
-	if cg.IsStopped() {
+	if cg.IsStopped() && stopped {
 		return fmt.Errorf("consumer group is stopped or rebalancing")
 	}
-	cg.metadata.Stopped = true
+	if !cg.IsStopped() && !stopped {
+		return fmt.Errorf("consumer group is running")
+	}
+	cg.metadata.Stopped = stopped
 	err := c.updateGroupMetadataToZK(group, cg.metadata)
 	if err != nil {
 		log.ErrorLogger.WithFields(logrus.Fields{
@@ -216,7 +198,6 @@ func (c *Consumer) StopConsumerGroup(group string) error {
 		}).Error("Failed to update the metadata to zk")
 		return err
 	}
-	cg.Stop()
 	return nil
 }
 
@@ -338,6 +319,7 @@ func (c *Consumer) handleMetadataChange() {
 		}
 		group := arr[1]
 		c.delGroup(group)
+		log.ErrorLogger.WithField("group", group).Info("Group was stopped since the metadata has changed")
 		c.startGroup(group)
 	}
 }
@@ -407,7 +389,6 @@ func (c *Consumer) delGroup(group string) {
 		cg.Stop()
 	}
 	c.groups.Delete(group)
-	log.ErrorLogger.WithField("group", group).Error("Group is stop, because zk dir is deleted")
 }
 
 //note: EventCallback will block the subsequent operations,
