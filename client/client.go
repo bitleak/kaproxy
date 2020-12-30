@@ -102,6 +102,17 @@ func NewKaproxyClient(host string, port int, token string) *KaproxyClient {
 	}
 }
 
+// WithHttpClient was used to allow the user to custom the http client
+func (c *KaproxyClient) WithHttpClient(httpCli *http.Client, blockingHttpCli *http.Client) *KaproxyClient {
+	if httpCli != nil {
+		c.httpCli = httpCli
+	}
+	if blockingHttpCli != nil {
+		c.httpBlockingCli = blockingHttpCli
+	}
+	return c
+}
+
 // WithTimeout return a pointer to kaproxyClient which http client's timeout is specified
 func (c *KaproxyClient) WithTimeout(timeout time.Duration) *KaproxyClient {
 	c.httpCli.Timeout = timeout
