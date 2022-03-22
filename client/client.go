@@ -240,7 +240,7 @@ func (c *KaproxyClient) Consume(group, topic string, durationArg ...time.Duratio
 		return nil, &APIError{requestErr, err.Error(), ""}
 	}
 	//http timeout always greater than blocking timeout
-	c.httpBlockingCli.Timeout = timeout + 200*time.Millisecond
+	c.httpBlockingCli.Timeout = timeout - 200*time.Millisecond
 	resp, err := c.httpBlockingCli.Do(req)
 	if err != nil {
 		return nil, &APIError{requestErr, err.Error(), ""}
