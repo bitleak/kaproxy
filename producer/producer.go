@@ -68,11 +68,12 @@ func GetFnvHash(key string) int32 {
 	return int32(hash.Sum32() >> 1) // Right shit to avoid converting to negative value
 }
 
-func (p *Producer) ProduceMessageWithoutReplication(topic, key, value string, partition int32) (*ProduceResponse, error) {
+func (p *Producer) ProduceMessageWithoutReplication(topic, key, value string, recordHeader []sarama.RecordHeader, partition int32) (*ProduceResponse, error) {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Value:     sarama.StringEncoder(value),
 		Partition: partition,
+		Headers:   recordHeader,
 	}
 	if key != "" {
 		msg.Key = sarama.StringEncoder(key)
@@ -89,11 +90,12 @@ func (p *Producer) ProduceMessageWithoutReplication(topic, key, value string, pa
 	return response, nil
 }
 
-func (p *Producer) ProduceMessageWithReplication(topic, key, value string, partition int32, partitionMethod string) (*ProduceResponse, error) {
+func (p *Producer) ProduceMessageWithReplication(topic, key, value string, recordHeader []sarama.RecordHeader, partition int32, partitionMethod string) (*ProduceResponse, error) {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Value:     sarama.StringEncoder(value),
 		Partition: partition,
+		Headers:   recordHeader,
 	}
 	if key != "" {
 		msg.Key = sarama.StringEncoder(key)
@@ -107,6 +109,7 @@ func (p *Producer) ProduceMessageWithReplication(topic, key, value string, parti
 			Topic:           topic,
 			Key:             []byte(key),
 			Value:           []byte(value),
+			Headers:         recordHeader,
 			Partition:       partition,
 			PartitionMethod: partitionMethod,
 		}

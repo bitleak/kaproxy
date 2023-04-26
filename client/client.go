@@ -24,20 +24,24 @@ type ProduceResp struct {
 }
 
 type ConsumeResp struct {
-	Partition int    `json:"partition"`
-	Offset    int64  `json:"offset"`
-	Key       []byte `json:"key"`
-	Value     []byte `json:"value"`
+	Partition int       `json:"partition"`
+	Offset    int64     `json:"offset"`
+	Key       []byte    `json:"key"`
+	Value     []byte    `json:"value"`
+	Headers   []Header  `json:"headers"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 func (c *ConsumeResp) UnmarshalJSON(data []byte) error {
 	var resp struct {
-		Topic     string `json:"topic"`
-		Partition int    `json:"partition"`
-		Encoding  string `json:"encoding"`
-		Offset    int64  `json:"offset"`
-		Key       string `json:"key"`
-		Value     string `json:"value"`
+		Topic     string    `json:"topic"`
+		Partition int       `json:"partition"`
+		Encoding  string    `json:"encoding"`
+		Offset    int64     `json:"offset"`
+		Key       string    `json:"key"`
+		Value     string    `json:"value"`
+		Headers   []Header  `json:"headers"`
+		Timestamp time.Time `json:"timestamp"`
 	}
 	err := json.Unmarshal(data, &resp)
 	if err != nil {
@@ -52,12 +56,22 @@ func (c *ConsumeResp) UnmarshalJSON(data []byte) error {
 		}
 	}
 	c.Key = []byte(resp.Key)
+	if resp.Headers != nil {
+		c.Headers = resp.Headers
+	}
 	c.Partition = resp.Partition
 	c.Offset = resp.Offset
+	c.Timestamp = resp.Timestamp
 	return nil
 }
 
 type Message struct {
+	Key     []byte
+	Value   []byte
+	Headers []Header
+}
+
+type Header struct {
 	Key   []byte
 	Value []byte
 }
@@ -149,6 +163,10 @@ func (c *KaproxyClient) produce(topic string, partition int, message Message, ha
 	if message.Key != nil {
 		body.Add("key", string(message.Key))
 	}
+	if len(message.Headers) != 0 {
+		res, _ := json.Marshal(message.Headers)
+		body.Add("headers", string(res))
+	}
 	if partition >= 0 {
 		path = fmt.Sprintf("/topic/%s/partition/%d", topic, partition)
 	} else {
@@ -196,6 +214,41 @@ func (c *KaproxyClient) ProduceWithHash(topic string, message Message) (*Produce
 
 func (c *KaproxyClient) ProduceWithPartition(topic string, partition int, message Message) (*ProduceResp, *APIError) {
 	return c.produce(topic, partition, message, false)
+}
+
+func (c *KaproxyClient) BatchProduceWithJson(topic string, messages []Message) (int, *APIError) {
+	requestBodyBytes, err := json.Marshal(messages)
+	if err != nil {
+		return 0, &APIError{requestErr, err.Error(), ""}
+	}
+	req, err := c.buildRequest(http.MethodPost, fmt.Sprintf("/topic/%s/batch_with_json", topic), nil, bytes.NewBuffer(requestBodyBytes))
+	if err != nil {
+		return 0, &APIError{requestErr, err.Error(), ""}
+	}
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	resp, err := c.httpCli.Do(req)
+	if err != nil {
+		return 0, &APIError{requestErr, err.Error(), ""}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, &APIError{requestErr, parseResponseError(resp), resp.Header.Get(rid)}
+	}
+
+	respBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return 0, &APIError{responseErr, err.Error(), resp.Header.Get(rid)}
+	}
+
+	var respData struct {
+		Count int `json:"count"`
+	}
+	err = json.Unmarshal(respBytes, &respData)
+	if err != nil {
+		return 0, &APIError{responseErr, err.Error(), resp.Header.Get(rid)}
+	}
+	return respData.Count, nil
 }
 
 func (c *KaproxyClient) BatchProduce(topic string, messages []Message) (int, *APIError) {

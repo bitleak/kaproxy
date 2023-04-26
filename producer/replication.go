@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/Shopify/sarama"
 	"sync"
 	"time"
 
@@ -37,6 +38,7 @@ type ReplicatedMessage struct {
 
 	Topic           string
 	Key             []byte // Q: Why using []byte instead of string ?
+	Headers         []sarama.RecordHeader
 	Value           []byte // A: string when marshaled is required to be UTF-8, but []byte supports binary
 	Partition       int32
 	PartitionMethod string
@@ -139,6 +141,7 @@ func (b *batchReplicator) sendMetaMessage(partitionID int32, batchID, key string
 		r.ReplicationTopic,
 		key,
 		string(value),
+		nil,
 		partitionID,
 	)
 	if err != nil {
@@ -184,7 +187,7 @@ func (b *batchReplicator) Send(partitionID int32, batchID, key string, digestCh 
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %s", err)
 	}
-	_, err = p.ProduceMessageWithoutReplication(r.ReplicationTopic, key, string(value), partitionID)
+	_, err = p.ProduceMessageWithoutReplication(r.ReplicationTopic, key, string(value), msg.Headers, partitionID)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %s", err)
 	}
