@@ -92,8 +92,36 @@ func batchProduce(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart form"})
 		return
 	}
+	var msgHead [][]sarama.RecordHeader
+	if h := c.Request.Header.Get("__headers__"); h != "" {
+		if err := json.Unmarshal([]byte(h), &msgHead); err != nil {
+			logger.WithFields(logrus.Fields{
+				"__headers__": h,
+				"topic":       topic,
+				"err":         err,
+			}).Error("Failed to parse __headers__")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":       "invalid __headers__",
+				"topic":       topic,
+				"__headers__": h,
+			})
+			return
+		}
+		if len(msgHead) > 0 && len(msgHead) != len(data) {
+			errMsg := "the length of the __headers__ must be equal to the length of the multipart form data"
+			logger.WithFields(logrus.Fields{
+				"__headers__": h,
+			}).Warn(errMsg)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":       errMsg,
+				"topic":       topic,
+				"__headers__": h,
+			})
+			return
+		}
+	}
 
-	for _, v := range data { // key: v[0]; value: v[1]
+	for i, v := range data { // key: v[0]; value: v[1]
 		partition, err := srv.producer.SelectPartition(topic, v[0], partitioner)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -104,11 +132,14 @@ func batchProduce(c *gin.Context) {
 			})
 			return
 		}
-
+		var h []sarama.RecordHeader
+		if len(msgHead) == len(data) {
+			h = msgHead[i]
+		}
 		if replicateFlag == "yes" {
-			_, err = srv.producer.ProduceMessageWithReplication(topic, v[0], v[1], nil, partition, c.Param("partition"))
+			_, err = srv.producer.ProduceMessageWithReplication(topic, v[0], v[1], h, partition, c.Param("partition"))
 		} else {
-			_, err = srv.producer.ProduceMessageWithoutReplication(topic, v[0], v[1], nil, partition)
+			_, err = srv.producer.ProduceMessageWithoutReplication(topic, v[0], v[1], h, partition)
 		}
 
 		if err != nil {
@@ -121,55 +152,5 @@ func batchProduce(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"msg": "succeeded", "count": len(data)})
-	return
-}
-
-func batchProduceWithJson(c *gin.Context) {
-	logger := getLogger(c)
-
-	partitioner := c.DefaultQuery("partitioner", "random")
-	topic := c.Param("topic")
-	replicateFlag := c.DefaultQuery("replicate", "yes")
-	var requestBody []struct {
-		Key     []byte                `json:"key"`
-		Value   []byte                `json:"value"`
-		Headers []sarama.RecordHeader `json:"headers"`
-	}
-	if err := c.BindJSON(&requestBody); err != nil {
-		logger.WithField("err", err).Warn("Failed to parse request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-	for _, message := range requestBody {
-		key := string(message.Key)
-		value := string(message.Value)
-		headers := message.Headers
-		partition, err := srv.producer.SelectPartition(topic, key, partitioner)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":       err.Error(),
-				"topic":       topic,
-				"key":         key,
-				"partitioner": partitioner,
-			})
-			return
-		}
-
-		if replicateFlag == "yes" {
-			_, err = srv.producer.ProduceMessageWithReplication(topic, key, value, headers, partition, c.Param("partition"))
-		} else {
-			_, err = srv.producer.ProduceMessageWithoutReplication(topic, key, value, headers, partition)
-		}
-
-		if err != nil {
-			logger.WithFields(logrus.Fields{
-				"topic": topic,
-				"err":   err,
-			}).Error("Failed to send message")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-			return
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"msg": "succeeded", "count": len(requestBody)})
 	return
 }

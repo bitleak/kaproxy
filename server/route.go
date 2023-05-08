@@ -57,6 +57,5 @@ func setupProxyRouters(engine *gin.Engine) {
 		produceAPI.POST("", metrics.TrackHttpMetrics("produce"), produceByPartitioner)
 		produceAPI.POST("/partition/:partition", metrics.TrackHttpMetrics("produce"), produceManual)
 		produceAPI.POST("/batch", metrics.TrackHttpMetrics("batch_produce"), batchProduce)
-		produceAPI.POST("/batch_with_json", metrics.TrackHttpMetrics("batch_produce"), batchProduceWithJson)
 	}
 }
