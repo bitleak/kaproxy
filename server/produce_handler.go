@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"github.com/Shopify/sarama"
 	"net/http"
 
 	"github.com/bitleak/kaproxy/producer"
@@ -28,6 +30,19 @@ func produce(c *gin.Context) {
 	topic := c.Param("topic")
 	key := c.PostForm("key")
 	value := c.PostForm("value")
+	headers := c.PostForm("headers")
+	var recordHeader []sarama.RecordHeader
+	if headers != "" {
+		err := json.Unmarshal([]byte(headers), &recordHeader)
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"headers": headers,
+				"err":     err,
+			}).Error("Failed to parse headers")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid headers"})
+			return
+		}
+	}
 	replicateFlag := c.DefaultQuery("replicate", "yes")
 
 	partition, err := srv.producer.SelectPartition(topic, key, c.Param("partition"))
@@ -38,9 +53,9 @@ func produce(c *gin.Context) {
 
 	var response *producer.ProduceResponse
 	if replicateFlag == "yes" {
-		response, err = srv.producer.ProduceMessageWithReplication(topic, key, value, partition, c.Param("partition"))
+		response, err = srv.producer.ProduceMessageWithReplication(topic, key, value, recordHeader, partition, c.Param("partition"))
 	} else {
-		response, err = srv.producer.ProduceMessageWithoutReplication(topic, key, value, partition)
+		response, err = srv.producer.ProduceMessageWithoutReplication(topic, key, value, recordHeader, partition)
 	}
 
 	if err != nil {
@@ -77,8 +92,36 @@ func batchProduce(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart form"})
 		return
 	}
+	var msgHead [][]sarama.RecordHeader
+	if h := c.Request.Header.Get("__headers__"); h != "" {
+		if err := json.Unmarshal([]byte(h), &msgHead); err != nil {
+			logger.WithFields(logrus.Fields{
+				"__headers__": h,
+				"topic":       topic,
+				"err":         err,
+			}).Error("Failed to parse __headers__")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":       "invalid __headers__",
+				"topic":       topic,
+				"__headers__": h,
+			})
+			return
+		}
+		if len(msgHead) > 0 && len(msgHead) != len(data) {
+			errMsg := "the length of the __headers__ must be equal to the length of the multipart form data"
+			logger.WithFields(logrus.Fields{
+				"__headers__": h,
+			}).Warn(errMsg)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":       errMsg,
+				"topic":       topic,
+				"__headers__": h,
+			})
+			return
+		}
+	}
 
-	for _, v := range data { // key: v[0]; value: v[1]
+	for i, v := range data { // key: v[0]; value: v[1]
 		partition, err := srv.producer.SelectPartition(topic, v[0], partitioner)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -89,11 +132,14 @@ func batchProduce(c *gin.Context) {
 			})
 			return
 		}
-
+		var h []sarama.RecordHeader
+		if len(msgHead) == len(data) {
+			h = msgHead[i]
+		}
 		if replicateFlag == "yes" {
-			_, err = srv.producer.ProduceMessageWithReplication(topic, v[0], v[1], partition, c.Param("partition"))
+			_, err = srv.producer.ProduceMessageWithReplication(topic, v[0], v[1], h, partition, c.Param("partition"))
 		} else {
-			_, err = srv.producer.ProduceMessageWithoutReplication(topic, v[0], v[1], partition)
+			_, err = srv.producer.ProduceMessageWithoutReplication(topic, v[0], v[1], h, partition)
 		}
 
 		if err != nil {

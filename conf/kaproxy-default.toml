@@ -9,7 +9,7 @@ AccessLogEnable = false
 
 [Kafka]
 Brokers = ["127.0.0.1:9092"]
-Version = "0.8.2.2"
+Version = "1.1.0"
 Zookeepers = ["127.0.0.1:2181"]
 ZKSessionTimeout = "6s"
 

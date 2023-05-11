@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -24,20 +25,24 @@ type ProduceResp struct {
 }
 
 type ConsumeResp struct {
-	Partition int    `json:"partition"`
-	Offset    int64  `json:"offset"`
-	Key       []byte `json:"key"`
-	Value     []byte `json:"value"`
+	Partition int       `json:"partition"`
+	Offset    int64     `json:"offset"`
+	Key       []byte    `json:"key"`
+	Value     []byte    `json:"value"`
+	Headers   []Header  `json:"headers"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 func (c *ConsumeResp) UnmarshalJSON(data []byte) error {
 	var resp struct {
-		Topic     string `json:"topic"`
-		Partition int    `json:"partition"`
-		Encoding  string `json:"encoding"`
-		Offset    int64  `json:"offset"`
-		Key       string `json:"key"`
-		Value     string `json:"value"`
+		Topic     string    `json:"topic"`
+		Partition int       `json:"partition"`
+		Encoding  string    `json:"encoding"`
+		Offset    int64     `json:"offset"`
+		Key       string    `json:"key"`
+		Value     string    `json:"value"`
+		Headers   []Header  `json:"headers"`
+		Timestamp time.Time `json:"timestamp"`
 	}
 	err := json.Unmarshal(data, &resp)
 	if err != nil {
@@ -52,14 +57,29 @@ func (c *ConsumeResp) UnmarshalJSON(data []byte) error {
 		}
 	}
 	c.Key = []byte(resp.Key)
+	if resp.Headers != nil {
+		c.Headers = resp.Headers
+	}
 	c.Partition = resp.Partition
 	c.Offset = resp.Offset
+	c.Timestamp = resp.Timestamp
 	return nil
 }
 
 type Message struct {
+	Key     []byte
+	Value   []byte
+	Headers []Header
+}
+
+type Header struct {
 	Key   []byte
 	Value []byte
+}
+
+type Plugin interface {
+	OnProduce(ctx context.Context, path string, peer string, injector func(key, value string) error)
+	OnConsume(ctx context.Context, path string, injector func(key string) (string, error))
 }
 
 type KaproxyClient struct {
@@ -71,6 +91,11 @@ type KaproxyClient struct {
 
 	httpCli         *http.Client
 	httpBlockingCli *http.Client //For blocking request only
+	plugins         []Plugin
+}
+
+func (c *KaproxyClient) Use(plugin Plugin) {
+	c.plugins = append(c.plugins, plugin)
 }
 
 func NewKaproxyClient(host string, port int, token string) *KaproxyClient {
@@ -135,11 +160,22 @@ func (c *KaproxyClient) buildRequest(method, path string, query url.Values, body
 	}
 	targetUrl := url.URL{
 		Scheme:   "http",
-		Host:     fmt.Sprintf("%s:%d", c.host, c.port),
+		Host:     c.genHost(c.host, c.port),
 		Path:     path,
 		RawQuery: query.Encode(),
 	}
 	return http.NewRequest(method, targetUrl.String(), body)
+}
+
+func (c *KaproxyClient) genProducePath(topic string, partition int) string {
+	var path string
+
+	if partition >= 0 {
+		path = fmt.Sprintf("/topic/%s/partition/%d", topic, partition)
+	} else {
+		path = fmt.Sprintf("/topic/%s", topic)
+	}
+	return path
 }
 
 func (c *KaproxyClient) produce(topic string, partition int, message Message, hash bool) (*ProduceResp, *APIError) {
@@ -149,15 +185,14 @@ func (c *KaproxyClient) produce(topic string, partition int, message Message, ha
 	if message.Key != nil {
 		body.Add("key", string(message.Key))
 	}
-	if partition >= 0 {
-		path = fmt.Sprintf("/topic/%s/partition/%d", topic, partition)
-	} else {
-		path = fmt.Sprintf("/topic/%s", topic)
-		if hash {
-			body.Add("partitioner", "hash")
-		}
+	if len(message.Headers) != 0 {
+		res, _ := json.Marshal(message.Headers)
+		body.Add("headers", string(res))
 	}
-
+	path = c.genProducePath(topic, partition)
+	if partition < 0 && hash {
+		body.Add("partitioner", "hash")
+	}
 	req, err := c.buildRequest(http.MethodPost, path, nil, strings.NewReader(body.Encode()))
 	if err != nil {
 		return nil, &APIError{requestErr, err.Error(), ""}
@@ -190,26 +225,72 @@ func (c *KaproxyClient) Produce(topic string, message Message) (*ProduceResp, *A
 	return c.produce(topic, -1, message, false)
 }
 
+func (c *KaproxyClient) genHost(host string, port int) string {
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func (c *KaproxyClient) onProduce(ctx context.Context, topic string, partition int, message *Message) {
+	for _, plugin := range c.plugins {
+		plugin.OnProduce(ctx, c.genProducePath(topic, partition), c.genHost(c.host, c.port), func(key, value string) error {
+			message.Headers = append(message.Headers, Header{[]byte(key), []byte(value)})
+			return nil
+		})
+	}
+}
+
+func (c *KaproxyClient) onBatchProduce(ctx context.Context, topic string, messages *[]Message) {
+	for _, plugin := range c.plugins {
+		plugin.OnProduce(ctx, c.genBatchProducePath(topic), c.genHost(c.host, c.port), func(key, value string) error {
+			for i, message := range *messages {
+				(*messages)[i].Headers = append(message.Headers, Header{[]byte(key), []byte(value)})
+			}
+			return nil
+		})
+	}
+}
+func (c *KaproxyClient) ProduceWithCtx(ctx context.Context, topic string, message Message) (*ProduceResp, *APIError) {
+	c.onProduce(ctx, topic, -1, &message)
+	return c.Produce(topic, message)
+
+}
 func (c *KaproxyClient) ProduceWithHash(topic string, message Message) (*ProduceResp, *APIError) {
 	return c.produce(topic, -1, message, true)
+}
+
+func (c *KaproxyClient) ProduceWithHashWithCtx(ctx context.Context, topic string, message Message) (*ProduceResp, *APIError) {
+	c.onProduce(ctx, topic, -1, &message)
+	return c.ProduceWithHash(topic, message)
 }
 
 func (c *KaproxyClient) ProduceWithPartition(topic string, partition int, message Message) (*ProduceResp, *APIError) {
 	return c.produce(topic, partition, message, false)
 }
 
+func (c *KaproxyClient) ProduceWithPartitionWithCtx(ctx context.Context, topic string, partition int, message Message) (*ProduceResp, *APIError) {
+	c.onProduce(ctx, topic, partition, &message)
+	return c.ProduceWithPartition(topic, partition, message)
+}
+
 func (c *KaproxyClient) BatchProduce(topic string, messages []Message) (int, *APIError) {
 	body := new(bytes.Buffer)
 	multiform := multipart.NewWriter(body)
-	for _, message := range messages {
+	var headerSlice = make([][]Header, len(messages))
+	for i, message := range messages {
 		multiform.WriteField(string(message.Key), string(message.Value))
+		headerSlice[i] = message.Headers
 	}
 	multiform.Close()
-	req, err := c.buildRequest(http.MethodPost, fmt.Sprintf("/topic/%s/batch", topic), nil, body)
+	req, err := c.buildRequest(http.MethodPost, c.genBatchProducePath(topic), nil, body)
 	if err != nil {
 		return 0, &APIError{requestErr, err.Error(), ""}
 	}
 	req.Header.Add("Content-Type", fmt.Sprintf("multipart/form-data; charset=utf-8; boundary=%s", multiform.Boundary()))
+	if headerStore, err := json.Marshal(headerSlice); err == nil {
+		req.Header.Add("__headers__", string(headerStore))
+	} else {
+		return 0, &APIError{requestErr, err.Error(), ""}
+	}
+
 	resp, err := c.httpCli.Do(req)
 	if err != nil {
 		return 0, &APIError{requestErr, err.Error(), ""}
@@ -235,6 +316,18 @@ func (c *KaproxyClient) BatchProduce(topic string, messages []Message) (int, *AP
 	return respData.Count, nil
 }
 
+func (c *KaproxyClient) genBatchProducePath(topic string) string {
+	return fmt.Sprintf("/topic/%s/batch", topic)
+}
+
+func (c *KaproxyClient) BatchProduceWithCtx(ctx context.Context, topic string, messages []Message) (int, *APIError) {
+	c.onBatchProduce(ctx, topic, &messages)
+	return c.BatchProduce(topic, messages)
+}
+
+func (c *KaproxyClient) genConsumePath(group string, topic string) string {
+	return fmt.Sprintf("/group/%s/topic/%s", group, topic)
+}
 func (c *KaproxyClient) Consume(group, topic string, durationArg ...time.Duration) (*ConsumeResp, *APIError) {
 	timeout := 3000 * time.Millisecond //blocking timeout
 	if len(durationArg) > 0 {
@@ -246,7 +339,7 @@ func (c *KaproxyClient) Consume(group, topic string, durationArg ...time.Duratio
 		ttr := durationArg[1]
 		query.Add("ttr", strconv.FormatInt(ttr.Nanoseconds()/1000000, 10))
 	}
-	req, err := c.buildRequest(http.MethodGet, fmt.Sprintf("/group/%s/topic/%s", group, topic), query, nil)
+	req, err := c.buildRequest(http.MethodGet, c.genConsumePath(group, topic), query, nil)
 	if err != nil {
 		return nil, &APIError{requestErr, err.Error(), ""}
 	}
@@ -288,6 +381,23 @@ func (c *KaproxyClient) Consume(group, topic string, durationArg ...time.Duratio
 		return nil, &APIError{responseErr, err.Error(), resp.Header.Get(rid)}
 	}
 	return &respData, nil
+}
+
+func (c *KaproxyClient) ConsumeWithCtx(ctx context.Context, group, topic string, durationArg ...time.Duration) (*ConsumeResp, *APIError) {
+	consumeResp, err := c.Consume(group, topic, durationArg...)
+	if consumeResp != nil {
+		for _, plugin := range c.plugins {
+			plugin.OnConsume(ctx, c.genConsumePath(topic, group), func(key string) (string, error) {
+				for _, header := range consumeResp.Headers {
+					if string(header.Key) == key {
+						return string(header.Value), nil
+					}
+				}
+				return "", nil
+			})
+		}
+	}
+	return consumeResp, err
 }
 
 func (c *KaproxyClient) ACK(group, topic string, message *ConsumeResp) *APIError {

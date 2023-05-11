@@ -26,6 +26,8 @@ func reply(c *gin.Context, message *sarama.ConsumerMessage) {
 		c.JSON(http.StatusOK, gin.H{
 			"key":       string(message.Key),
 			"value":     string(message.Value),
+			"headers":   message.Headers,
+			"timestamp": message.Timestamp,
 			"topic":     message.Topic,
 			"partition": message.Partition,
 			"offset":    message.Offset,
@@ -35,6 +37,8 @@ func reply(c *gin.Context, message *sarama.ConsumerMessage) {
 		c.JSON(http.StatusOK, gin.H{
 			"key":       string(message.Key),
 			"value":     message.Value,
+			"headers":   message.Headers,
+			"timestamp": message.Timestamp,
 			"topic":     message.Topic,
 			"partition": message.Partition,
 			"offset":    message.Offset,
